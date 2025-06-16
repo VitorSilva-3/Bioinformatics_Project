@@ -24,8 +24,26 @@ with st.sidebar.expander("About this platform", expanded=True):
 
 Entrez.email = "vtsilva3@gmail.com"
 
-st.session_state.setdefault("sel_alga", "All")
-st.session_state.setdefault("sel_sugar", "All")
+def init_session_state():
+    st.session_state.setdefault("data_loaded", False)
+    
+    st.session_state.setdefault("applied_alga", "All")
+    st.session_state.setdefault("applied_sugar", "All")
+    st.session_state.setdefault("filters_applied", False)
+    
+    st.session_state.setdefault("tab2_search_initiated", False)
+    st.session_state.setdefault("tab2_combined_articles", {})
+    
+    st.session_state.setdefault("tab3_taxonomy_loaded", False)
+    st.session_state.setdefault("tab3_taxonomy_data", {})
+    
+    st.session_state.setdefault("tab4_kegg_loaded", False)
+    st.session_state.setdefault("tab4_kegg_data", {})
+    
+    st.session_state.setdefault("tab5_uniprot_loaded", False)
+    st.session_state.setdefault("tab5_uniprot_data", {})
+
+init_session_state()
 
 @st.cache_data(ttl=3600)
 def load_data() -> pd.DataFrame:
@@ -34,53 +52,24 @@ def load_data() -> pd.DataFrame:
         return build_df()
 
 @st.cache_data(ttl=7200) 
-def get_all_enzyme_info() -> dict:
+def get_all_enzyme_info_cached() -> dict:
     enzyme_info = {}
-    total_enzymes = len(enzymes)
-    
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    
-    for i, enzyme_name in enumerate(enzymes.keys()):
-        status_text.text(f"Fetching KEGG data for {enzyme_name}...")
-        progress_bar.progress((i + 1) / total_enzymes)
-        
+    for enzyme_name in enzymes.keys():
         info = fetch_kegg_enzyme_info(enzyme_name)
         if info:  
             enzyme_info[enzyme_name] = info
-        
         time.sleep(0.1)
-    
-    progress_bar.empty()
-    status_text.empty()
-    
     return enzyme_info
 
 @st.cache_data(ttl=7200)
-def get_all_uniprot_enzyme_info() -> dict:
+def get_all_uniprot_enzyme_info_cached() -> dict:
     uniprot_info = {}
-    total_enzymes = len(enzymes)
-    
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    
-    for i, enzyme_name in enumerate(enzymes.keys()):
-        status_text.text(f"Fetching UniProt data for {enzyme_name}...")
-        progress_bar.progress((i + 1) / total_enzymes)
-        
+    for enzyme_name in enzymes.keys():
         info = fetch_uniprot_enzyme_info(enzyme_name, max_entries=30)
         if info:
             uniprot_info[enzyme_name] = info
-        
         time.sleep(0.5) 
-    
-    progress_bar.empty()
-    status_text.empty()
-    
     return uniprot_info
-
-if 'data_loaded' not in st.session_state:
-    st.session_state.data_loaded = False
 
 if not st.session_state.data_loaded:
     with st.status("Initializing application...", expanded=True) as status:
@@ -103,8 +92,10 @@ col_micro = "Algae"
 alga_options = ["All"] + sorted(df_full[col_micro].unique())
 sugar_options = ["All"] + sorted(df_full["Target sugar"].unique())
 
-selected_alga = st.sidebar.selectbox("Algae", alga_options, index=alga_options.index(st.session_state.get("applied_alga", "All")))
-selected_sugar = st.sidebar.selectbox("Target sugar", sugar_options, index=sugar_options.index(st.session_state.get("applied_sugar", "All")))
+selected_alga = st.sidebar.selectbox("Algae", alga_options, 
+                                   index=alga_options.index(st.session_state.get("applied_alga", "All")))
+selected_sugar = st.sidebar.selectbox("Target sugar", sugar_options, 
+                                    index=sugar_options.index(st.session_state.get("applied_sugar", "All")))
 
 def reset_filters():
     st.session_state.applied_alga = "All"
@@ -131,9 +122,6 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 
 with tab1:
     st.subheader("Filtered Data Results")
-    
-    if "filters_applied" not in st.session_state:
-        st.session_state.filters_applied = True
     
     filtered = df_full.copy()
     if st.session_state.get("applied_alga", "All") != "All":
@@ -180,36 +168,45 @@ with tab2:
     
     organisms = sorted(df_full["Algae"].str.replace(r"\*", "", regex=True).unique())
     
-    if st.button("Search Combined Articles", key="search_combined"):
-        if not organisms:
-            st.warning("No algae species found in the dataset.")
-        else:
-            st.info(f"Searching for articles combining {len(organisms)} algae species with all enzyme types. This is the most comprehensive search and may take several minutes...")
-        
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-        
-            all_combination_results = {}
-        
-            for i, organism in enumerate(organisms):
-                status_text.text(f"Searching combined articles for {organism}... ({i+1}/{len(organisms)})")
-                progress_bar.progress((i + 1) / len(organisms))
-            
-                try:
-                    organism_enzyme_results = search_articles_by_organism_with_enzymes(organism, max_articles_per_enzyme=20)
-                    all_combination_results[organism] = organism_enzyme_results
-                    time.sleep(1)  
-                except Exception as e:
-                    st.error(f"Error searching combinations for {organism}: {str(e)}")
-                    all_combination_results[organism] = {}
-        
-            progress_bar.empty()
-            status_text.empty()
-        
-            st.session_state.combined_articles = all_combination_results
+    col_search, col_clear = st.columns([3, 1])
+    with col_search:
+        if st.button("Search Combined Articles", key="tab2_search_combined"):
+            if not organisms:
+                st.warning("No algae species found in the dataset.")
+            else:
+                st.session_state.tab2_search_initiated = True
+                st.info(f"Searching for articles combining {len(organisms)} algae species with all enzyme types. This may take several minutes...")
+                
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                all_combination_results = {}
+                
+                for i, organism in enumerate(organisms):
+                    status_text.text(f"Searching combined articles for {organism}... ({i+1}/{len(organisms)})")
+                    progress_bar.progress((i + 1) / len(organisms))
+                
+                    try:
+                        organism_enzyme_results = search_articles_by_organism_with_enzymes(organism, max_articles_per_enzyme=20)
+                        all_combination_results[organism] = organism_enzyme_results
+                        time.sleep(1)  
+                    except Exception as e:
+                        st.error(f"Error searching combinations for {organism}: {str(e)}")
+                        all_combination_results[organism] = {}
+                
+                progress_bar.empty()
+                status_text.empty()
+                
+                st.session_state.tab2_combined_articles = all_combination_results
     
-    if 'combined_articles' in st.session_state:
-        all_combination_results = st.session_state.combined_articles
+    with col_clear:
+        if st.button("Clear Results", key="tab2_clear"):
+            st.session_state.tab2_search_initiated = False
+            st.session_state.tab2_combined_articles = {}
+            st.rerun()
+    
+    if st.session_state.tab2_search_initiated and st.session_state.tab2_combined_articles:
+        all_combination_results = st.session_state.tab2_combined_articles
         total_articles = 0
         combinations_with_articles = 0
         for organism_results in all_combination_results.values():
@@ -252,7 +249,6 @@ with tab2:
                             st.markdown(f"Authors: {authors_str}")
                             
                             st.markdown(f"Journal: {article['journal']} ({article['year']})")
-                            
                             st.markdown(f"Search focus: {organism} + {enzyme_name} (EC {ec_number})")
                             
                             col_a, col_b = st.columns(2)
@@ -276,47 +272,55 @@ with tab3:
     
     organisms = sorted(df_full[col_micro].str.replace(r"\*", "", regex=True).unique())
     
-    if st.button("Load Taxonomy Data", key="load_taxonomy"):
-        taxonomy_data = {}
-    
-        if len(organisms) > 1:
-            taxonomy_progress = st.progress(0)
-            taxonomy_status = st.empty()
-            taxonomy_status.text(f"Loading taxonomy data for {len(organisms)} organisms...")
-    
-        for i, organism in enumerate(organisms):
+    col_load, col_clear = st.columns([3, 1])
+    with col_load:
+        if st.button("Load Taxonomy Data", key="tab3_load_taxonomy"):
+            st.session_state.tab3_taxonomy_loaded = True
+            taxonomy_data = {}
+        
             if len(organisms) > 1:
-                taxonomy_status.text(f"Loading taxonomy for {organism}... ({i+1}/{len(organisms)})")
-                taxonomy_progress.progress((i + 1) / len(organisms))
+                taxonomy_progress = st.progress(0)
+                taxonomy_status = st.empty()
+                taxonomy_status.text(f"Loading taxonomy data for {len(organisms)} organisms...")
         
+            for i, organism in enumerate(organisms):
+                if len(organisms) > 1:
+                    taxonomy_status.text(f"Loading taxonomy for {organism}... ({i+1}/{len(organisms)})")
+                    taxonomy_progress.progress((i + 1) / len(organisms))
             
-            try:
-                with st.spinner(f"Fetching taxonomy data...") if len(organisms) <= 5 else st.empty():
-                    handle = Entrez.esearch(db="taxonomy", term=f"{organism}[Scientific Name]")
-                    ids = Entrez.read(handle)["IdList"]
-                    if ids:
-                        tax_handle = Entrez.efetch(db="taxonomy", id=ids[0], retmode="xml")
-                        record = Entrez.read(tax_handle)[0]
-                        lineage = record.get("Lineage", "")
-                    else:
-                        lineage = ""
-                    taxonomy_data[organism] = lineage
-                        
-            except Exception as e:
-                taxonomy_data[organism] = f"Error: {str(e)}"
-        
-        if len(organisms) > 1:
-            taxonomy_progress.empty()
-            taxonomy_status.empty()
+                try:
+                    with st.spinner(f"Fetching taxonomy data...") if len(organisms) <= 5 else st.empty():
+                        handle = Entrez.esearch(db="taxonomy", term=f"{organism}[Scientific Name]")
+                        ids = Entrez.read(handle)["IdList"]
+                        if ids:
+                            tax_handle = Entrez.efetch(db="taxonomy", id=ids[0], retmode="xml")
+                            record = Entrez.read(tax_handle)[0]
+                            lineage = record.get("Lineage", "")
+                        else:
+                            lineage = ""
+                        taxonomy_data[organism] = lineage
+                            
+                except Exception as e:
+                    taxonomy_data[organism] = f"Error: {str(e)}"
+            
+            if len(organisms) > 1:
+                taxonomy_progress.empty()
+                taxonomy_status.empty()
 
-        st.session_state.taxonomy_data = taxonomy_data
+            st.session_state.tab3_taxonomy_data = taxonomy_data
 
-        successful_lookups = sum(1 for lineage in taxonomy_data.values() 
-                        if lineage and not lineage.startswith("Error:"))
-        st.success(f"Taxonomy lookup completed successfully for {successful_lookups} out of {len(organisms)} organisms")
+            successful_lookups = sum(1 for lineage in taxonomy_data.values() 
+                            if lineage and not lineage.startswith("Error:"))
+            st.success(f"Taxonomy lookup completed successfully for {successful_lookups} out of {len(organisms)} organisms")
     
-    if 'taxonomy_data' in st.session_state:
-        for organism, lineage in st.session_state.taxonomy_data.items():
+    with col_clear:
+        if st.button("Clear Taxonomy", key="tab3_clear"):
+            st.session_state.tab3_taxonomy_loaded = False
+            st.session_state.tab3_taxonomy_data = {}
+            st.rerun()
+    
+    if st.session_state.tab3_taxonomy_loaded and st.session_state.tab3_taxonomy_data:
+        for organism, lineage in st.session_state.tab3_taxonomy_data.items():
             with st.expander(f"{organism}"):
                 if lineage and not lineage.startswith("Error:"):
                     st.success("Taxonomy data retrieved successfully")
@@ -331,20 +335,40 @@ with tab3:
 with tab4:
     st.subheader("KEGG Enzyme Database Information")
     
-    if st.button("Load KEGG Data", key="load_kegg"):
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        status_text.text("Initializing KEGG data retrieval...")
+    col_load, col_clear = st.columns([3, 1])
+    with col_load:
+        if st.button("Load KEGG Data", key="tab4_load_kegg"):
+            st.session_state.tab4_kegg_loaded = True
+            
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            enzyme_info = {}
+            total_enzymes = len(enzymes)
+            
+            for i, enzyme_name in enumerate(enzymes.keys()):
+                status_text.text(f"Fetching KEGG data for {enzyme_name}...")
+                progress_bar.progress((i + 1) / total_enzymes)
+                
+                info = fetch_kegg_enzyme_info(enzyme_name)
+                if info:  
+                    enzyme_info[enzyme_name] = info
+                
+                time.sleep(0.1)
+            
+            progress_bar.empty()
+            status_text.empty()
+            
+            st.session_state.tab4_kegg_data = enzyme_info
     
-        with st.spinner("Loading KEGG enzyme information..."):
-            all_enzyme_info = get_all_enzyme_info()
-            st.session_state.kegg_data = all_enzyme_info
+    with col_clear:
+        if st.button("Clear KEGG Data", key="tab4_clear"):
+            st.session_state.tab4_kegg_loaded = False
+            st.session_state.tab4_kegg_data = {}
+            st.rerun()
     
-        progress_bar.empty()
-        status_text.empty()
-    
-    if 'kegg_data' in st.session_state:
-        all_enzyme_info = st.session_state.kegg_data
+    if st.session_state.tab4_kegg_loaded:
+        all_enzyme_info = st.session_state.tab4_kegg_data
         
         if not all_enzyme_info:
             st.warning("No enzyme information could be retrieved from KEGG database.")
@@ -394,25 +418,45 @@ with tab4:
                     
                     if info.get('ec_number'):
                         kegg_url = f"https://www.genome.jp/entry/ec:{info['ec_number']}"
-                        st.markdown(f"[View detailed information on KEGG database]({kegg_url})")  
+                        st.markdown(f"[View detailed information on KEGG database]({kegg_url})")
 
 with tab5:
     st.subheader("UniProt Database Information")
     
-    if st.button("Load UniProt Data", key="load_uniprot"):
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        status_text.text("Initializing UniProt data retrieval...")
+    col_load, col_clear = st.columns([3, 1])
+    with col_load:
+        if st.button("Load UniProt Data", key="tab5_load_uniprot"):
+            st.session_state.tab5_uniprot_loaded = True
+            
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            uniprot_info = {}
+            total_enzymes = len(enzymes)
+            
+            for i, enzyme_name in enumerate(enzymes.keys()):
+                status_text.text(f"Fetching UniProt data for {enzyme_name}...")
+                progress_bar.progress((i + 1) / total_enzymes)
+                
+                info = fetch_uniprot_enzyme_info(enzyme_name, max_entries=30)
+                if info:
+                    uniprot_info[enzyme_name] = info
+                
+                time.sleep(0.5) 
+            
+            progress_bar.empty()
+            status_text.empty()
+            
+            st.session_state.tab5_uniprot_data = uniprot_info
     
-        with st.spinner("Loading UniProt information..."):
-            all_uniprot_info = get_all_uniprot_enzyme_info()
-            st.session_state.uniprot_data = all_uniprot_info
+    with col_clear:
+        if st.button("Clear UniProt Data", key="tab5_clear"):
+            st.session_state.tab5_uniprot_loaded = False
+            st.session_state.tab5_uniprot_data = {}
+            st.rerun()
     
-        progress_bar.empty()
-        status_text.empty()
-    
-    if 'uniprot_data' in st.session_state:
-        all_uniprot_info = st.session_state.uniprot_data
+    if st.session_state.tab5_uniprot_loaded:
+        all_uniprot_info = st.session_state.tab5_uniprot_data
         
         if not all_uniprot_info:
             st.warning("No enzyme information could be retrieved from UniProt database.")
