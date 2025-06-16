@@ -1,24 +1,11 @@
 
 import streamlit as st
+from Bio import Entrez
 import pandas as pd
-import plotly.express as px
-from Bio import Entrez, SeqIO, Medline
-import re
+from data_processing import build_df
+from search import (fetch_kegg_enzyme_info, fetch_uniprot_enzyme_info, search_articles_by_organism_with_enzymes)
 import time
-import urllib.error
-from data import ec_manual, sugar_manual, taxa, queries
-from collections import defaultdict
-
-def normalize_text(s: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", s.lower())
-
-normalised_keys = []
-for full_key, ec_number in ec_manual.items():
-    subkeys = [sub.strip() for sub in full_key.split("/")]
-    normalised_subkeys = [normalize_text(sub) for sub in subkeys]
-    normalised_keys.append((full_key, normalised_subkeys, ec_number))
-
-future_terms = ["hypothetical", "similar", "putative", "uncharacterized", "probable"]
+from data import enzymes
 
 st.set_page_config(
     page_title="Enzymes in Algae",
@@ -30,435 +17,477 @@ st.title("Enzymes in Algae")
 st.sidebar.header("Information & Filters")
 with st.sidebar.expander("About this platform", expanded=True):
     st.markdown(
-        "This platform integrates data on agro-industrial waste and the enzymes produced by various algae, organised by species. "
-        "It identifies which waste materials can serve as substrates for each alga, indicating those with the greatest growth potential."
+        "This platform integrates data on agro-industrial waste and the enzymes produced by various algae, "
+        "organised by species. It identifies which waste materials can serve as substrates for each alga, "
+        "indicating those with the greatest growth potential."
     )
 
 Entrez.email = "vtsilva3@gmail.com"
 
-def fetch_ids():
-    taxa_query = " OR ".join(f'"{t}"[Organism]' for t in taxa)
-    all_ids = set()
-    for q in queries:
-        full_query = f"{q} AND ({taxa_query})"
-        handle = Entrez.esearch(db="protein", term=full_query, retmax=10000)
-        all_ids.update(Entrez.read(handle)["IdList"])
-    return list(all_ids)
-
-def search_articles_by_organism(organism, max_articles=8):
-    articles = []
-    clean_organism = re.sub(r'[^\w\s]', '', organism).strip()
-    search_strategies = [
-        f'("{clean_organism}"[Organism] OR "{clean_organism}"[Title/Abstract]) AND (metabolism[MeSH Terms] OR enzyme*[Title/Abstract] OR biochemical[Title/Abstract])',
-        f'"{clean_organism}"[Title/Abstract] AND (biotechnology[Title/Abstract] OR industrial[Title/Abstract] OR biofuel*[Title/Abstract])',
-        f'"{clean_organism}"[Organism] AND (cultivation[Title/Abstract] OR growth[Title/Abstract] OR production[Title/Abstract])',
-        f'"{clean_organism}"[Title/Abstract]'
-    ]
-    
-    for strategy_idx, query in enumerate(search_strategies):
-        try:
-            handle = Entrez.esearch(
-                db="pubmed", 
-                term=query, 
-                retmax=max_articles//len(search_strategies) + 2,
-                sort="relevance"
-            )
-            search_results = Entrez.read(handle)
-            handle.close()
-            
-            if search_results["IdList"]:
-                pmids = search_results["IdList"]
-                handle = Entrez.efetch(
-                    db="pubmed",
-                    id=",".join(pmids),
-                    rettype="medline",
-                    retmode="text"
-                )
-                
-                medline_records = Medline.parse(handle)
-                
-                for record in medline_records:
-                    pmid = record.get('PMID', 'N/A')
-                    if not any(art['pmid'] == pmid for art in articles):
-                        article_info = {
-                            'pmid': pmid,
-                            'title': record.get('TI', 'No title available'),
-                            'authors': record.get('AU', ['No authors listed']),
-                            'journal': record.get('JT', 'Unknown journal'),
-                            'year': record.get('DP', 'Unknown year'),
-                            'abstract': record.get('AB', 'No abstract available'),
-                            'doi': record.get('LID', ['No DOI'])[0] if record.get('LID') else 'No DOI',
-                            'search_focus': 'organism',
-                            'search_strategy': strategy_idx + 1
-                        }
-                        articles.append(article_info)
-                
-                handle.close()
-                
-                if len(articles) >= max_articles:
-                    break
-                    
-        except Exception as e:
-            print(f"Error searching for alga (strategy {strategy_idx + 1}): {e}")
-            continue
-    
-    return articles[:max_articles]
-
-def search_articles_by_enzyme_type(enzyme_name, ec_number=None, max_articles=8):
-    articles = []
-    clean_enzyme = re.sub(r'[^\w\s]', '', enzyme_name).strip()
-    search_strategies = []
-    
-    if ec_number and ec_number != "unknown":
-        search_strategies.extend([
-            f'"{ec_number}"[Title/Abstract]',
-            f'("{ec_number}"[Title/Abstract] OR "{clean_enzyme}"[Title/Abstract]) AND enzyme*[Title/Abstract]'
-        ])
-    
-    search_strategies.extend([
-        f'"{clean_enzyme}"[Title/Abstract] AND (industrial[Title/Abstract] OR biotechnology[Title/Abstract] OR application*[Title/Abstract])',
-        f'"{clean_enzyme}"[Title/Abstract] AND (characterization[Title/Abstract] OR purification[Title/Abstract] OR activity[Title/Abstract])',
-        f'"{clean_enzyme}"[Title/Abstract] AND enzyme*[Title/Abstract]',
-        f'"{clean_enzyme}"[Title/Abstract]'
-    ])
-    
-    for strategy_idx, query in enumerate(search_strategies):
-        try:
-            handle = Entrez.esearch(
-                db="pubmed", 
-                term=query, 
-                retmax=max_articles//len(search_strategies) + 2,
-                sort="relevance"
-            )
-            search_results = Entrez.read(handle)
-            handle.close()
-            
-            if search_results["IdList"]:
-                pmids = search_results["IdList"]
-                handle = Entrez.efetch(
-                    db="pubmed",
-                    id=",".join(pmids),
-                    rettype="medline",
-                    retmode="text"
-                )
-                
-                medline_records = Medline.parse(handle)
-                
-                for record in medline_records:
-                    pmid = record.get('PMID', 'N/A')
-                    if not any(art['pmid'] == pmid for art in articles):
-                        article_info = {
-                            'pmid': pmid,
-                            'title': record.get('TI', 'No title available'),
-                            'authors': record.get('AU', ['No authors listed']),
-                            'journal': record.get('JT', 'Unknown journal'),
-                            'year': record.get('DP', 'Unknown year'),
-                            'abstract': record.get('AB', 'No abstract available'),
-                            'doi': record.get('LID', ['No DOI'])[0] if record.get('LID') else 'No DOI',
-                            'search_focus': 'enzyme',
-                            'search_strategy': strategy_idx + 1,
-                            'ec_number': ec_number
-                        }
-                        articles.append(article_info)
-                
-                handle.close()
-                
-                if len(articles) >= max_articles:
-                    break
-                    
-        except Exception as e:
-            print(f"Error searching for enzyme (strategy {strategy_idx + 1}): {e}")
-            continue
-    
-    return articles[:max_articles]
-
-def display_articles(articles, focus_type):
-    if not articles:
-        st.info(f"No relevant articles found for this {focus_type}.")
-        return
-    
-    st.markdown(f"**Found {len(articles)} relevant articles:**")
-    
-    for article in articles:
-        with st.container():
-            st.markdown(f"### {article['title']}")
-            
-            info_parts = []
-            
-            if article['authors'] and article['authors'] != ['No authors listed']:
-                authors_str = ", ".join(article['authors'][:3])
-                if len(article['authors']) > 3:
-                    authors_str += " et al."
-                info_parts.append(f"**Authors:** {authors_str}")
-            
-            journal_year = f"**Journal:** {article['journal']}"
-            if article['year'] != 'Unknown year':
-                journal_year += f" ({article['year']})"
-            info_parts.append(journal_year)
-            
-            if article['pmid'] != 'N/A':
-                info_parts.append(f"[View on PubMed](https://pubmed.ncbi.nlm.nih.gov/{article['pmid']}/)")
-            
-            st.markdown(" • ".join(info_parts))
-            
-            if article['abstract'] != 'No abstract available':
-                st.markdown("**Abstract:**")
-                st.markdown(f"> {article['abstract']}")
-            
-            st.markdown("---")
-
-def display_organism_articles_tab(filtered_df, show_articles_flag):
-    if show_articles_flag:
-        st.subheader("Scientific articles by algae")
-        st.markdown("*Articles focused on algae.*")
-        
-        unique_organisms = sorted(filtered_df['Algae'].unique())
-        
-        for organism in unique_organisms:
-            with st.expander(f"**{organism}**", expanded=False):
-                with st.spinner(f"Searching articles for {organism}..."):
-                    articles = load_organism_articles(organism)
-                
-                display_articles(articles, "organism")
-    else:
-        st.info("Enable *Show scientific articles* in the sidebar to view relevant articles.")
-
-def display_enzyme_articles_tab(filtered_df, show_articles_flag):
-    if show_articles_flag:
-        st.subheader("Scientific articles by enzymes")
-        st.markdown("*Articles focused on enzymes.*")
-        
-        confirmed_enzymes_df = filtered_df[filtered_df['Status'] == '🟢']
-        
-        if confirmed_enzymes_df.empty:
-            st.info("No confirmed enzymes (🟢 status) found with the current filters.")
-            return
-        
-        enzyme_groups = confirmed_enzymes_df.groupby(['Enzyme', 'EC number']).size().reset_index(name='count')
-        enzyme_groups = enzyme_groups.sort_values('count', ascending=False)
-        
-        for _, enzyme_row in enzyme_groups.iterrows():
-            enzyme_name = enzyme_row['Enzyme']
-            ec_number = enzyme_row['EC number']
-            
-            expander_title = f"**{enzyme_name}**"
-            if ec_number and ec_number != "unknown":
-                expander_title += f" (EC: {ec_number})"
-            
-            with st.expander(expander_title, expanded=False):
-                with st.spinner(f"Searching articles for {enzyme_name}..."):
-                    articles = load_enzyme_articles(enzyme_name, ec_number)
-                
-                display_articles(articles, "enzyme")
-    else:
-        st.info("Enable *Show scientific articles* in the sidebar to view relevant articles.")
-
-def fetch_records(id_list, batch_size=500, max_retries=3):
-    records = []
-    if not id_list:
-        return records
-
-    def chunks(lst, n):
-        for i in range(0, len(lst), n):
-            yield lst[i : i + n]
-
-    total_batches = (len(id_list) + batch_size - 1) // batch_size
-
-    for batch_idx, batch in enumerate(chunks(id_list, batch_size), start=1):
-        attempt = 0
-        while attempt < max_retries:
-            try:
-                ids_str = ",".join(batch)
-                handle = Entrez.efetch(
-                    db="protein",
-                    id=ids_str,
-                    rettype="gb",
-                    retmode="text"
-                )
-                batch_records = list(SeqIO.parse(handle, "genbank"))
-                handle.close()
-                records.extend(batch_records)
-                break
-
-            except urllib.error.HTTPError as e:
-                attempt += 1
-                if e.code == 500 and attempt < max_retries:
-                    wait_time = 2 ** attempt
-                    print(f"[WARNING] Batch {batch_idx}/{total_batches} returned HTTP 500. Retrying in {wait_time}s...")
-                    time.sleep(wait_time)
-                    continue
-                else:
-                    print(f"[ERROR] Batch {batch_idx} failed with HTTP {e.code}: {e}")
-                    raise
-
-            except Exception as e:
-                attempt += 1
-                if attempt < max_retries:
-                    wait_time = 2 ** attempt
-                    print(f"[WARNING] Unexpected error in batch {batch_idx}. Retrying in {wait_time}s...")
-                    time.sleep(wait_time)
-                    continue
-                else:
-                    print(f"[ERROR] Critical failure in batch {batch_idx}: {e}")
-                    raise
-
-        time.sleep(0.5)
-
-    return records
-
-def build_df():
-    rows = []
-    ids = fetch_ids()
-    records = fetch_records(ids)
-
-    for rec in records:
-        organism = rec.annotations.get("organism", "unknown")
-        cds = next((f for f in rec.features if f.type == "CDS"), None)
-        product_raw = cds.qualifiers.get("product", [rec.description])[0]
-        product = re.split(r"\s*\[", product_raw)[0].strip()
-        lower_prod = product.lower()
-
-        has_term = any(t in lower_prod for t in future_terms)
-
-        matched_ec = None
-        matched_sugar = None
-
-        if not has_term:
-            normalised_product = normalize_text(product)
-            for full_key, subkeys_norm, ec_number in normalised_keys:
-                if all(sub in normalised_product for sub in subkeys_norm):
-                    matched_ec = ec_number
-                    matched_sugar = sugar_manual.get(full_key, "unknown")
-                    break
-
-        if has_term:
-            if "uncharacterized" in lower_prod:
-                status = "🔴"
-            else:
-                status = "🟡"
-        elif matched_ec is not None:
-            status = "🟢"
-        else:
-            continue
-
-        if has_term and matched_ec is None:
-            matched_ec = "unknown"
-            matched_sugar = "unknown"
-
-        rows.append({
-            "Algae":         organism,
-            "Enzyme":        product,
-            "EC number":     matched_ec,
-            "Target sugar":  matched_sugar,
-            "Description":   product_raw,
-            "Status":        status
-        })
-
-    df = pd.DataFrame(rows)
-    return df
-
-@st.cache_data(ttl=3600)
-def load_data():
-    return build_df()
-
-@st.cache_data(ttl=7200)
-def load_organism_articles(organism):
-    return search_articles_by_organism(organism, max_articles=8)
-
-@st.cache_data(ttl=7200)
-def load_enzyme_articles(enzyme_name, ec_number):
-    return search_articles_by_enzyme_type(enzyme_name, ec_number, max_articles=8)
-
-st.session_state.setdefault("show_results", False)
 st.session_state.setdefault("sel_alga", "All")
 st.session_state.setdefault("sel_sugar", "All")
-st.session_state.setdefault("show_articles", False)
 
-df_temp = load_data()
-if df_temp.empty:
-    st.warning("No records available for filtering.")
+@st.cache_data(ttl=3600)
+def load_data() -> pd.DataFrame:
+    with st.spinner("Loading data..."):
+        time.sleep(0.5)  
+        return build_df()
+
+@st.cache_data(ttl=7200) 
+def get_all_enzyme_info() -> dict:
+    enzyme_info = {}
+    total_enzymes = len(enzymes)
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    for i, enzyme_name in enumerate(enzymes.keys()):
+        status_text.text(f"Fetching KEGG data for {enzyme_name}...")
+        progress_bar.progress((i + 1) / total_enzymes)
+        
+        info = fetch_kegg_enzyme_info(enzyme_name)
+        if info:  
+            enzyme_info[enzyme_name] = info
+        
+        time.sleep(0.1)
+    
+    progress_bar.empty()
+    status_text.empty()
+    
+    return enzyme_info
+
+@st.cache_data(ttl=7200)
+def get_all_uniprot_enzyme_info() -> dict:
+    uniprot_info = {}
+    total_enzymes = len(enzymes)
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    for i, enzyme_name in enumerate(enzymes.keys()):
+        status_text.text(f"Fetching UniProt data for {enzyme_name}...")
+        progress_bar.progress((i + 1) / total_enzymes)
+        
+        info = fetch_uniprot_enzyme_info(enzyme_name, max_entries=30)
+        if info:
+            uniprot_info[enzyme_name] = info
+        
+        time.sleep(0.5) 
+    
+    progress_bar.empty()
+    status_text.empty()
+    
+    return uniprot_info
+
+if 'data_loaded' not in st.session_state:
+    st.session_state.data_loaded = False
+
+if not st.session_state.data_loaded:
+    with st.status("Initializing application...", expanded=True) as status:
+        st.write("Loading enzyme data...")
+        df_full = load_data()
+        st.write("Preparing filter options...")
+        time.sleep(0.3) 
+        st.write("Application ready!")
+        status.update(label="Application initialized successfully!", state="complete", expanded=False)
+        st.session_state.data_loaded = True
+        st.session_state.df_full = df_full
+else:
+    df_full = st.session_state.df_full
+
+if df_full.empty:
+    st.error("No records available for filtering.")
     st.stop()
 
 col_micro = "Algae"
-alga_options  = ["All"] + sorted(df_temp[col_micro].unique())
-sugar_options = ["All"] + sorted(df_temp["Target sugar"].unique())
-st.sidebar.selectbox("Algae", alga_options, key="sel_alga")
-st.sidebar.selectbox("Target sugar", sugar_options, key="sel_sugar")
+alga_options = ["All"] + sorted(df_full[col_micro].unique())
+sugar_options = ["All"] + sorted(df_full["Target sugar"].unique())
 
-st.sidebar.checkbox("Show scientific articles", key="show_articles", 
-                   help="Enable this to search for relevant scientific articles organized by algae and enzymes.")
-
-if st.sidebar.button("Show results"):
-    st.session_state.show_results = True
+selected_alga = st.sidebar.selectbox("Algae", alga_options, index=alga_options.index(st.session_state.get("applied_alga", "All")))
+selected_sugar = st.sidebar.selectbox("Target sugar", sugar_options, index=sugar_options.index(st.session_state.get("applied_sugar", "All")))
 
 def reset_filters():
-    st.session_state.sel_alga     = "All"
-    st.session_state.sel_sugar    = "All"
-    st.session_state.show_results = False
-    st.session_state.show_articles = False
+    st.session_state.applied_alga = "All"
+    st.session_state.applied_sugar = "All"
+    st.session_state.filters_applied = False
 
-st.sidebar.button("Clear filters", on_click=reset_filters)
+col_btn1, col_btn2 = st.sidebar.columns(2)
+with col_btn1:
+    if st.button("Apply Filters", type="primary"):
+        st.session_state.applied_alga = selected_alga
+        st.session_state.applied_sugar = selected_sugar
+        st.session_state.filters_applied = True
+        st.rerun()
+with col_btn2:
+    st.button("Clear Filters", on_click=reset_filters)
 
-if st.session_state.show_results:
-    df = load_data()
-    if df.empty:
-        st.warning("No records found for the specified query.")
-        st.stop()
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "Data",
+    "Articles by Alga and Enzyme (NCBI)",
+    "Taxonomy",
+    "KEGG Enzyme Database",
+    "UniProt Database"
+])
 
-    filtered = df.copy()
-    if st.session_state.sel_alga != "All":
-        filtered = filtered[filtered[col_micro] == st.session_state.sel_alga]
-    if st.session_state.sel_sugar != "All":
-        filtered = filtered[filtered["Target sugar"] == st.session_state.sel_sugar]
-
-    filtered = filtered.sort_values(by=col_micro, ascending=True).reset_index(drop=True)
-    filtered[col_micro] = filtered[col_micro].apply(lambda x: f"{x}")
-
-    tab1, tab2, tab3, tab4 = st.tabs(["Data", "Articles by Organism", "Articles by Enzyme", "Taxonomy"])
-
-    with tab1:
-        count = len(filtered)
-        rec_str = "record" if count == 1 else "records"
-        c1, c2 = st.columns(2)
-        c1.metric("Unique algae", filtered[col_micro].nunique())
-        c2.metric("Displayed records", count)
-        st.subheader(f"Results ({count} {rec_str})")
+with tab1:
+    st.subheader("Filtered Data Results")
+    
+    if "filters_applied" not in st.session_state:
+        st.session_state.filters_applied = True
+    
+    filtered = df_full.copy()
+    if st.session_state.get("applied_alga", "All") != "All":
+        filtered = filtered[filtered[col_micro] == st.session_state.applied_alga]
+    if st.session_state.get("applied_sugar", "All") != "All":
+        filtered = filtered[filtered["Target sugar"] == st.session_state.applied_sugar]
+    
+    filtered = filtered.sort_values(by=col_micro).reset_index(drop=True)
+    filtered[col_micro] = filtered[col_micro].astype(str)
+    
+    count = len(filtered)
+    st.write(f"Results ({count} {'record' if count == 1 else 'records'})")
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Unique algae", filtered[col_micro].nunique(),
+                 help="Number of different algae species in the results")
+    with col2:
+        st.metric("Displayed records", count,
+                 help="Total number of records matching your filters")
+    with col3:
+        if count > 0:
+            completion_rate = (filtered["Status"].str.contains("🟢").sum() / count * 100)
+            st.metric("Confirmed enzymes", f"{completion_rate:.1f}%",
+                     help="Percentage of records with confirmed enzyme activity")
+    
+    if count > 100:
+        with st.spinner("Rendering large dataset..."):
+            st.dataframe(filtered, use_container_width=True)
+    else:
         st.dataframe(filtered, use_container_width=True)
-        st.markdown(
-            """
-            Status:
+    
+    st.markdown(
+        """
+        Status legend:
+        - 🟢 Enzyme confirmed
+        - 🟡 Probable enzyme
+        - 🔴 Enzyme not confirmed
+        """
+    )
 
-            - 🟢 Enzyme confirmed
-            - 🟡 Probable enzyme
-            - 🔴 Enzyme not confirmed
-            """
-        )
+with tab2:
+    st.subheader("Scientific Articles by Algae and Enzyme Combination")
+    
+    organisms = sorted(df_full["Algae"].str.replace(r"\*", "", regex=True).unique())
+    
+    if st.button("Search Combined Articles", key="search_combined"):
+        if not organisms:
+            st.warning("No algae species found in the dataset.")
+        else:
+            st.info(f"Searching for articles combining {len(organisms)} algae species with all enzyme types. This is the most comprehensive search and may take several minutes...")
+        
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+        
+            all_combination_results = {}
+        
+            for i, organism in enumerate(organisms):
+                status_text.text(f"Searching combined articles for {organism}... ({i+1}/{len(organisms)})")
+                progress_bar.progress((i + 1) / len(organisms))
+            
+                try:
+                    organism_enzyme_results = search_articles_by_organism_with_enzymes(organism, max_articles_per_enzyme=20)
+                    all_combination_results[organism] = organism_enzyme_results
+                    time.sleep(1)  
+                except Exception as e:
+                    st.error(f"Error searching combinations for {organism}: {str(e)}")
+                    all_combination_results[organism] = {}
+        
+            progress_bar.empty()
+            status_text.empty()
+        
+            st.session_state.combined_articles = all_combination_results
+    
+    if 'combined_articles' in st.session_state:
+        all_combination_results = st.session_state.combined_articles
+        total_articles = 0
+        combinations_with_articles = 0
+        for organism_results in all_combination_results.values():
+            for enzyme_articles in organism_results.values():
+                total_articles += len(enzyme_articles)
+                if enzyme_articles:
+                    combinations_with_articles += 1
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Algae Species", len(organisms))
+        with col2:
+            st.metric("Total Articles Found", total_articles)
+        with col3:
+            st.metric("Successful Combinations", combinations_with_articles)
+        
+        for organism, organism_results in all_combination_results.items():
+            organism_article_count = sum(len(articles) for articles in organism_results.values())
+            
+            with st.expander(f"{organism} - {organism_article_count} combined articles found", 
+                            expanded=len(organisms) == 1):
+                if organism_article_count == 0:
+                    st.warning("No articles found combining this algae species with any enzymes.")
+                    continue
+                
+                for enzyme_name, articles in organism_results.items():
+                    if not articles:
+                        continue
+                    
+                    ec_number = enzymes.get(enzyme_name, "Unknown EC")
+                    st.markdown(f"### {enzyme_name.title()} (EC {ec_number}) - {len(articles)} articles")
+                    
+                    for idx, article in enumerate(articles, 1):
+                        with st.container():
+                            st.markdown(f"{idx}. {article['title']}")
+                            
+                            authors_str = ", ".join(article['authors'][:3])
+                            if len(article['authors']) > 3:
+                                authors_str += f" and {len(article['authors']) - 3} others"
+                            st.markdown(f"Authors: {authors_str}")
+                            
+                            st.markdown(f"Journal: {article['journal']} ({article['year']})")
+                            
+                            st.markdown(f"Search focus: {organism} + {enzyme_name} (EC {ec_number})")
+                            
+                            col_a, col_b = st.columns(2)
+                            with col_a:
+                                if article['pmid'] != 'N/A':
+                                    pubmed_url = f"https://pubmed.ncbi.nlm.nih.gov/{article['pmid']}"
+                                    st.markdown(f"[View on PubMed (ID: {article['pmid']})]({pubmed_url})")
+                            with col_b:
+                                if article['doi'] != 'No DOI' and 'doi' in article['doi'].lower():
+                                    st.markdown(f"DOI: {article['doi']}")
+                            
+                            if article['abstract']:
+                                st.markdown(f"*Abstract:* {article['abstract']}")
+                            
+                            st.divider()
+                    
+                    st.markdown("---")
 
-    with tab2:
-        display_organism_articles_tab(filtered, st.session_state.show_articles)
-
-    with tab3:
-        display_enzyme_articles_tab(filtered, st.session_state.show_articles)
-
-    with tab4:
-        st.subheader("Taxonomy details")
-        for org in sorted(filtered[col_micro].str.replace(r"\*", "", regex=True).unique()):
+with tab3:
+    st.subheader("Taxonomy Details")
+    
+    organisms = sorted(df_full[col_micro].str.replace(r"\*", "", regex=True).unique())
+    
+    if st.button("Load Taxonomy Data", key="load_taxonomy"):
+        taxonomy_data = {}
+    
+        if len(organisms) > 1:
+            taxonomy_progress = st.progress(0)
+            taxonomy_status = st.empty()
+            taxonomy_status.text(f"Loading taxonomy data for {len(organisms)} organisms...")
+    
+        for i, organism in enumerate(organisms):
+            if len(organisms) > 1:
+                taxonomy_status.text(f"Loading taxonomy for {organism}... ({i+1}/{len(organisms)})")
+                taxonomy_progress.progress((i + 1) / len(organisms))
+        
+            
             try:
-                handle = Entrez.esearch(db="taxonomy", term=f"{org}[Scientific Name]")
-                ids = Entrez.read(handle)["IdList"]
-                lineage = ""
-                if ids:
-                    tax_handle = Entrez.efetch(db="taxonomy", id=ids[0], retmode="xml")
-                    tax_record = Entrez.read(tax_handle)[0]
-                    lineage = tax_record.get("Lineage", "")
-                with st.expander(org, expanded=False):
-                    if lineage:
-                        for taxon in lineage.split("; "):
-                            st.markdown(f"- {taxon}")
+                with st.spinner(f"Fetching taxonomy data...") if len(organisms) <= 5 else st.empty():
+                    handle = Entrez.esearch(db="taxonomy", term=f"{organism}[Scientific Name]")
+                    ids = Entrez.read(handle)["IdList"]
+                    if ids:
+                        tax_handle = Entrez.efetch(db="taxonomy", id=ids[0], retmode="xml")
+                        record = Entrez.read(tax_handle)[0]
+                        lineage = record.get("Lineage", "")
                     else:
-                        st.write("No taxonomy data available.")
-            except Exception:
-                with st.expander(org, expanded=False):
-                    st.write("No taxonomy data available.")
-else:
-    st.info("Select your filters and click *Show results* to view the data.")
+                        lineage = ""
+                    taxonomy_data[organism] = lineage
+                        
+            except Exception as e:
+                taxonomy_data[organism] = f"Error: {str(e)}"
+        
+        if len(organisms) > 1:
+            taxonomy_progress.empty()
+            taxonomy_status.empty()
+
+        st.session_state.taxonomy_data = taxonomy_data
+
+        successful_lookups = sum(1 for lineage in taxonomy_data.values() 
+                        if lineage and not lineage.startswith("Error:"))
+        st.success(f"Taxonomy lookup completed successfully for {successful_lookups} out of {len(organisms)} organisms")
+    
+    if 'taxonomy_data' in st.session_state:
+        for organism, lineage in st.session_state.taxonomy_data.items():
+            with st.expander(f"{organism}"):
+                if lineage and not lineage.startswith("Error:"):
+                    st.success("Taxonomy data retrieved successfully")
+                    for taxon in lineage.split("; "):
+                        st.markdown(f"- {taxon}")
+                elif lineage.startswith("Error:"):
+                    st.error("Failed to retrieve taxonomy data")
+                    st.caption(lineage)
+                else:
+                    st.warning("No taxonomy data available for this organism")
+
+with tab4:
+    st.subheader("KEGG Enzyme Database Information")
+    
+    if st.button("Load KEGG Data", key="load_kegg"):
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        status_text.text("Initializing KEGG data retrieval...")
+    
+        with st.spinner("Loading KEGG enzyme information..."):
+            all_enzyme_info = get_all_enzyme_info()
+            st.session_state.kegg_data = all_enzyme_info
+    
+        progress_bar.empty()
+        status_text.empty()
+    
+    if 'kegg_data' in st.session_state:
+        all_enzyme_info = st.session_state.kegg_data
+        
+        if not all_enzyme_info:
+            st.warning("No enzyme information could be retrieved from KEGG database.")
+        else:
+            st.success(f"Successfully retrieved information for {len(all_enzyme_info)} enzymes from KEGG")
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Enzymes", len(enzymes))
+            with col2:
+                st.metric("Successfully Retrieved", len(all_enzyme_info))
+            with col3:
+                unique_ec_numbers = len(set(enzymes.values()))
+                st.metric("Unique EC Numbers", unique_ec_numbers)
+            
+            for enzyme_name, info in all_enzyme_info.items():
+                with st.expander(f"{enzyme_name.title()} (EC {info.get('ec_number', 'N/A')})"):
+                    info_col1, info_col2 = st.columns([2, 1])
+                    
+                    with info_col1:
+                        if info.get('name'):
+                            st.markdown(f"Official Name: {info['name']}")
+                        
+                        if info.get('definition'):
+                            st.markdown(f"Definition: {info['definition']}")
+                        
+                        if info.get('reaction'):
+                            st.markdown(f"Reaction: {info['reaction']}")
+                    
+                    with info_col2:
+                        ec_number = info.get('ec_number', '')
+                        if ec_number:
+                            st.markdown(f"EC Number: {ec_number}")
+                            ec_parts = ec_number.split('.')
+                            if len(ec_parts) >= 4:
+                                st.markdown(f"Class: {ec_parts[0]} (Main enzyme class)")
+                                st.markdown(f"Subclass: {ec_parts[1]}")
+                                st.markdown(f"Sub-subclass: {ec_parts[2]}")
+                                st.markdown(f"Serial number: {ec_parts[3]}")
+                    
+                    if info.get('pathways'):
+                        st.markdown("Associated Metabolic Pathways:")
+                        for pathway in info['pathways']:
+                            st.markdown(f"- {pathway['code']}: {pathway['description']}")
+                    else:
+                        st.markdown("No specific pathways found in KEGG database")
+                    
+                    if info.get('ec_number'):
+                        kegg_url = f"https://www.genome.jp/entry/ec:{info['ec_number']}"
+                        st.markdown(f"[View detailed information on KEGG database]({kegg_url})")  
+
+with tab5:
+    st.subheader("UniProt Database Information")
+    
+    if st.button("Load UniProt Data", key="load_uniprot"):
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        status_text.text("Initializing UniProt data retrieval...")
+    
+        with st.spinner("Loading UniProt information..."):
+            all_uniprot_info = get_all_uniprot_enzyme_info()
+            st.session_state.uniprot_data = all_uniprot_info
+    
+        progress_bar.empty()
+        status_text.empty()
+    
+    if 'uniprot_data' in st.session_state:
+        all_uniprot_info = st.session_state.uniprot_data
+        
+        if not all_uniprot_info:
+            st.warning("No enzyme information could be retrieved from UniProt database.")
+        else:
+            enzymes_with_data = [name for name, info in all_uniprot_info.items() if info.get('general_info')]
+            st.success(f"Successfully retrieved information for {len(enzymes_with_data)} enzymes from UniProt")
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Enzymes Queried", len(enzymes))
+            with col2:
+                st.metric("Enzymes with UniProt Data", len(enzymes_with_data))
+            with col3:
+                total_entries_analyzed = sum(info.get('total_entries_analyzed', 0) for info in all_uniprot_info.values())
+                st.metric("Total UniProt Entries Analyzed", total_entries_analyzed)
+            
+            for enzyme_name, info in all_uniprot_info.items():
+                general_info = info.get('general_info', {})
+                if not general_info:
+                    continue
+                    
+                entries_analyzed = info.get('total_entries_analyzed', 0)
+                with st.expander(f"{enzyme_name.title()} (EC {info.get('ec_number', 'N/A')}) - Analyzed {entries_analyzed} entries"):
+                    
+                    enzyme_col1, enzyme_col2 = st.columns([3, 2])
+                    
+                    with enzyme_col1:
+                        if general_info.get('protein_name') and general_info['protein_name'] != 'Unknown':
+                            st.markdown(f"Protein Name: {general_info['protein_name']}")
+                        
+                        st.markdown("Biochemical Functions:")
+                        functions = general_info.get('functions', [])
+                        if functions and functions != ['No function information available']:
+                            for func in functions[:3]:
+                                st.markdown(f"• {func}")
+                        else:
+                            st.markdown("• No specific function information available")
+                        
+                        if general_info.get('catalytic_activities'):
+                            st.markdown("Catalytic Activities:")
+                            for activity in general_info['catalytic_activities']:
+                                reaction = activity.get('reaction', 'Unknown reaction')
+                                st.markdown(f"• {reaction}")
+                    
+                    with enzyme_col2:
+                        ec_number = info.get('ec_number', '')
+                        if ec_number:
+                            st.markdown(f"EC Number: {ec_number}")
+                            ec_parts = ec_number.split('.')
+                            if len(ec_parts) >= 4:
+                                st.markdown(f"Enzyme Class: {ec_parts[0]}")
+                        
+                        if general_info.get('cofactors'):
+                            st.markdown("Required Cofactors:")
+                            for cofactor in general_info['cofactors']:
+                                st.markdown(f"• {cofactor}")
+                        
+                        if general_info.get('subunit_structure'):
+                            st.markdown("Subunit Structure:")
+                            for subunit in general_info['subunit_structure']:
+                                st.markdown(f"• {subunit}")
+                    
+                    if general_info.get('pathways'):
+                        st.markdown("Associated Metabolic Pathways:")
+                        for pathway in general_info['pathways']:
+                            st.markdown(f"• {pathway}")
+                    
+                    if ec_number:
+                        uniprot_search_url = f"https://www.uniprot.org/uniprotkb?query=ec%3A{ec_number}"
+                        st.markdown(f"[Search this enzyme on UniProt database]({uniprot_search_url})")
+            
+            no_data_enzymes = [name for name, info in all_uniprot_info.items() if not info.get('general_info')]
+            if no_data_enzymes:
+                with st.expander(f"Enzymes with no UniProt biochemical data ({len(no_data_enzymes)})"):
+                    st.markdown("The following enzymes did not return sufficient biochemical information from UniProt database:")
+                    for enzyme_name in no_data_enzymes:
+                        ec_number = enzymes.get(enzyme_name, 'Unknown')
+                        st.markdown(f"• {enzyme_name.title()} (EC {ec_number})")
