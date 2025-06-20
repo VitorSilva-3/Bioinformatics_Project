@@ -13,7 +13,7 @@ This repository contains the code and resources for a Bioinformatics Project.
 
 ## The Enzymes in Algae Platform  
 
-Our Streamlit application offers a 5-tab interface for:  
+This application offers a 5 tab interface for:  
 * Data visualisation  
 * Article search  
 * Taxonomy information  
