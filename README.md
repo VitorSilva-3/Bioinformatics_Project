@@ -8,22 +8,31 @@ Created by [Vítor Silva](https://github.com/VitorSilva-3) PG55538
 
 ## Enzymes in Algae Platform
 
+- **Main results**  
+  A folder with images of the platform, containing the main results.
+  
+- **Presentation.pdf**  
+  Used to show the main results of the project.
+
+- **requirements.txt**  
+  Python packages that were used in this project.
+
+- **Vítor_Silva_PG55538.pdf**  
+  Article of the project
+  
 ### Scripts Overview
 
 - **app.py**  
-  Main Streamlit interface with 5 tabs for data visualization, article search, taxonomy info, and enzyme databases (KEGG/UniProt)
+  Main Streamlit interface with 5 tabs for data visualisation, article search, taxonomy info, and enzyme databases (KEGG/UniProt).
 
 - **data.py**  
-  Contains enzyme configurations: EC numbers, target sugars, search queries, and algae taxonomic groups
+  Contains enzyme configurations: EC numbers, target sugars, search queries, and algae taxonomic groups.
 
 - **data_processing.py**  
-  Fetches protein data from NCBI, processes GenBank records, and builds the main dataset with enzyme classification
+  Fetches protein data from NCBI, processes GenBank records, and builds the main dataset with enzyme classification.
 
 - **search.py**  
-  Integrates external APIs for PubMed articles, KEGG enzyme pathways, and UniProt biochemical data
+  Integrates external APIs for PubMed articles, KEGG enzyme pathways, and UniProt biochemical data.
 
 - **utils.py**  
-  Helper functions for text normalization and identifying hypothetical proteins
-
-- **requirements.txt**  
-  Python packages that were used in this project
+  Helper functions for text normalization and identifying hypothetical proteins.
