@@ -11,6 +11,19 @@ This repository contains the code and resources for a Bioinformatics Project.
 
 ---
 
+## Objectives
+
+- **Link waste derived sugars to microalgal enzymes**  
+  Develop a bioinformatics platform that maps specific sugars from agro‑industrial waste to microalgal strains encoding the enzymes necessary to hydrolyse them into simple sugars (e.g. glucose).
+
+- **Integrate enzyme profiles**  
+  Consolidate enzyme data from diverse microalgal species into a single, user‑friendly interface for rapid querying and comparison.
+
+- **Match byproducts to algal strains**  
+  Use the platform to identify which agro‑industrial by‑products can serve as substrates and pinpoint the microalgae species with the greatest cultivation potential for each.  
+
+---
+
 ## The Enzymes in Algae Platform  
 
 This application offers a 5 tab interface for:  
