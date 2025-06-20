@@ -10,6 +10,8 @@ Link for the platform: https://enzymesalgae.streamlit.app/
 
 ## Enzymes in Algae Platform
 
+### Files overview
+
 - **Main results/**  
   A folder with images of the platform, containing the main results.
   
@@ -21,8 +23,6 @@ Link for the platform: https://enzymesalgae.streamlit.app/
 
 - **Vítor_Silva_PG55538.pdf**  
   Article of the project
-  
-### Scripts Overview
 
 - **app.py**  
   Main Streamlit interface with 5 tabs for data visualisation, article search, taxonomy info, and enzyme databases (KEGG/UniProt).
