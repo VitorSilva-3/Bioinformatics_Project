@@ -4,6 +4,8 @@ Repository created as part of a Bioinformatics Project.
 
 Created by [Vítor Silva](https://github.com/VitorSilva-3) PG55538
 
+Link for the platform: https://enzymesalgae.streamlit.app/
+
 ---
 
 ## Enzymes in Algae Platform
@@ -36,7 +38,3 @@ Created by [Vítor Silva](https://github.com/VitorSilva-3) PG55538
 
 - **utils.py**  
   Helper functions for text normalization and identifying hypothetical proteins.
-
-  ---
-
-  Link for the platform: (https://enzymesalgae.streamlit.app/)
