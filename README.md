@@ -20,7 +20,7 @@ This repository contains the code and resources for a Bioinformatics Project.
   Consolidate enzyme data from diverse microalgal species into a single, user‑friendly interface for rapid querying and comparison.
 
 - **Match byproducts to algal strains**  
-  Use the platform to identify which agro‑industrial by‑products can serve as substrates and pinpoint the microalgae species with the greatest cultivation potential for each.  
+  Use the platform to identify which agro‑industrial byproducts can serve as substrates and pinpoint the microalgae species with the greatest cultivation potential for each.  
 
 ---
 
