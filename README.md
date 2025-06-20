@@ -21,13 +21,20 @@ This application offers a 5 tab interface for:
 
 ### Repository Files  
 
-* **`Main results/`**:
-* Visual outputs and key results from the platform.   
-* **`Presentation.pdf`**: Project presentation.   
-* **`Vítor_Silva_PG55538.pdf`**: Full project article.    
-* **`app.py`**: Main Streamlit interface.    
-* **`data.py`**: Enzyme configurations (EC numbers, sugars, queries, taxonomy).   
-* **`data_processing.py`**: Processes NCBI protein data and builds the enzyme dataset.    
-* **`search.py`**: Integrates PubMed, KEGG, and UniProt APIs.   
-* **`utils.py`**: Helper functions for text normalisation and protein identification.    
+* **`Main results/`**: Visual outputs and key results from the platform.
+   
+* **`Presentation.pdf`**: Project presentation.
+  
+* **`Vítor_Silva_PG55538.pdf`**: Full project article.
+    
+* **`app.py`**: Main Streamlit interface.
+
+* **`data.py`**: Enzyme configurations (EC numbers, sugars, queries, taxonomy).
+    
+* **`data_processing.py`**: Processes NCBI protein data and builds the enzyme dataset.
+    
+* **`search.py`**: Integrates PubMed, KEGG, and UniProt APIs.
+  
+* **`utils.py`**: Helper functions for text normalisation and protein identification.
+    
 * **`requirements.txt`**: Lists all project dependencies.    
