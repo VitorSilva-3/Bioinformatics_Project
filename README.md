@@ -25,5 +25,5 @@ Created by [Vítor Silva](https://github.com/VitorSilva-3) PG55538
 - **utils.py**  
   Helper functions for text normalization and identifying hypothetical proteins
 
-- **requirements.txt**
+- **requirements.txt**  
   Python packages that were used in this project
