@@ -8,7 +8,7 @@ Created by [Vítor Silva](https://github.com/VitorSilva-3) PG55538
 
 ## Enzymes in Algae Platform
 
-- **Main results**  
+- **Main results/**  
   A folder with images of the platform, containing the main results.
   
 - **Presentation.pdf**  
