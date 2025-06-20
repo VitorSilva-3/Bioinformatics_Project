@@ -1,40 +1,32 @@
-# Bioinformatics Project
+# Bioinformatics Project: Enzymes in Algae
 
-Repository created as part of a Bioinformatics Project.
-
-Created by [Vítor Silva](https://github.com/VitorSilva-3) PG55538      
-
-Access the live platform at: [https://enzymesalgae.streamlit.app/](https://enzymesalgae.streamlit.app/)
+This repository contains the code and resources for a Bioinformatics Project.
 
 ---
 
-## Enzymes in Algae Platform
+## Project Overview
 
-### Files overview
+* **Developer:** [Vítor Silva](https://github.com/VitorSilva-3) (PG55538)  
+* **Live Application:** [https://enzymesalgae.streamlit.app/](https://enzymesalgae.streamlit.app/)  
 
-- **Main results/**  
-  A folder with images of the platform, containing the main results.
-  
-- **Presentation.pdf**  
-  Used to show the main results of the project.
-  
-- **Vítor_Silva_PG55538.pdf**  
-  Article of the project
+---
 
-- **app.py**  
-  Main Streamlit interface with 5 tabs for data visualisation, article search, taxonomy info, and enzyme databases (KEGG/UniProt).
+## The Enzymes in Algae Platform  
 
-- **data.py**  
-  Contains enzyme configurations: EC numbers, target sugars, search queries, and algae taxonomic groups.
+Our Streamlit application offers a 5-tab interface for:  
+* Data visualisation  
+* Article search  
+* Taxonomy information  
+* Database information (KEGG/UniProt)   
 
-- **data_processing.py**  
-  Fetches protein data from NCBI, processes GenBank records, and builds the main dataset with enzyme classification.
+### Repository Files  
 
-- **search.py**  
-  Integrates external APIs for PubMed articles, KEGG enzyme pathways, and UniProt biochemical data.
-
-- **utils.py**  
-  Helper functions for text normalization and identifying hypothetical proteins.
-
-- **requirements.txt**  
-  Python packages that were used in this project.
+* **`Main results/`**: Visual outputs and key results from the platform.   
+* **`Presentation.pdf`**: Project presentation.   
+* **`Vítor_Silva_PG55538.pdf`**: Full project article.    
+* **`app.py`**: Main Streamlit interface.    
+* **`data.py`**: Enzyme configurations (EC numbers, sugars, queries, taxonomy).   
+* **`data_processing.py`**: Processes NCBI protein data and builds the enzyme dataset.    
+* **`search.py`**: Integrates PubMed, KEGG, and UniProt APIs.   
+* **`utils.py`**: Helper functions for text normalisation and protein identification.    
+* **`requirements.txt`**: Lists all project dependencies.    
