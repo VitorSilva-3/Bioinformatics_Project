@@ -17,10 +17,7 @@ Link to the platform: https://enzymesalgae.streamlit.app/
   
 - **Presentation.pdf**  
   Used to show the main results of the project.
-
-- **requirements.txt**  
-  Python packages that were used in this project.
-
+  
 - **Vítor_Silva_PG55538.pdf**  
   Article of the project
 
@@ -38,3 +35,6 @@ Link to the platform: https://enzymesalgae.streamlit.app/
 
 - **utils.py**  
   Helper functions for text normalization and identifying hypothetical proteins.
+
+- **requirements.txt**  
+  Python packages that were used in this project.
