@@ -21,7 +21,8 @@ This application offers a 5 tab interface for:
 
 ### Repository Files  
 
-* **`Main results/`**: Visual outputs and key results from the platform.   
+* **`Main results/`**:
+* Visual outputs and key results from the platform.   
 * **`Presentation.pdf`**: Project presentation.   
 * **`Vítor_Silva_PG55538.pdf`**: Full project article.    
 * **`app.py`**: Main Streamlit interface.    
