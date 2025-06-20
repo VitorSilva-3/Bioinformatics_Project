@@ -4,7 +4,7 @@ Repository created as part of a Bioinformatics Project.
 
 Created by [Vítor Silva](https://github.com/VitorSilva-3) PG55538
 
-Link for the platform: https://enzymesalgae.streamlit.app/
+Link to the platform: https://enzymesalgae.streamlit.app/
 
 ---
 
