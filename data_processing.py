@@ -65,7 +65,10 @@ def build_df() -> pd.DataFrame:
     for rec in records:
         organism = rec.annotations.get("organism", "unknown")
         cds = next((f for f in rec.features if f.type == "CDS"), None)
-        product_raw = cds.qualifiers.get("product", [rec.description])[0]
+        try:
+            product_raw = cds.qualifiers.get("product", [rec.description])[0]
+        except Exception:
+            product_raw = rec.description
         product = re.split(r"\s*\[", product_raw)[0].strip()
         lower = product.lower()
         has_term = any(t in lower for t in future_terms)
